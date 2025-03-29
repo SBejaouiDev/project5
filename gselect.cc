@@ -4,49 +4,34 @@
 #include "base/trace.hh"
 
 GSelectBP::GSelectBP(const GSelectBPParams &params)
-    : BPredUnit(params),
-    
-      // Size of the predictor (entries)
-      PredictorSize(1 << ceilLog2(params.PredictorSize)), 
-       
+      : BPredUnit(params),
+      // Size of the predictor
+      PredictorSize(1 << ceilLog2(params.PredictorSize)),
       // Bits per counter
       PHTCtrBits(params.PHTCtrBits),
-      
-      //phtIndexBits(ceilLog2(params.PredictorSize)), 
-      
+      // Shift amount for branch address
       ShiftAmount(2),
-      
-      // Bits of the global history
+      // Global history bits
       globalHistoryBits(params.globalHistoryBits),
-     
-     
-     // Initialize the Pattern History Table with saturating counters
-     pht(PredictorSize, SatCounter8(PHTCtrBits)),
-     
-   
-     globalHistory(params.numThreads, 0)
-     
+      // Calculate branch address bits
+      branchAddressBits(ceilLog2(params.PredictorSize) - params.globalHistoryBits),
+      // Create masks
+      branchMask((1 << branchAddressBits) - 1),
+      globalHistoryMask((1 << globalHistoryBits) - 1),
+      // PHT setup
+      pht(PredictorSize, SatCounter8(PHTCtrBits)),
+      globalHistory(params.numThreads, 0)
 {
-	
-    // Calculate the PHT index bits using the PredictorSize
-    // ceilLog2 returns the smallest integer x such that 2^x >= PredictorSize
-    unsigned phtIndexBits = ceilLog2(PredictorSize);
-
-
-    // Calculate the number of branch address bits (m)
-    branchAddressBits = phtIndexBits - globalHistoryBits;
-
-    // Create masks for branch address and global history
-    // branchMask((1 << (ceilLog2(params.PredictorSize) - params.globalHistoryBits)) - 1), // done
+    // For debugging
+    DPRINTF(GSDebug, "Constructor: PHTIndexBits=%u, globalHistoryBits=%u, branchAddressBits=%u\n", 
+            ceilLog2(PredictorSize), globalHistoryBits, branchAddressBits);
+    DPRINTF(GSDebug, "Constructor: branchMask=%u, globalHistoryMask=%u\n", 
+            branchMask, globalHistoryMask);
     
-    branchMask = (1 << branchAddressBits) -1 ;
-    globalHistoryMask = ((1 << globalHistoryBits) - 1); 
-
-    // Calculate the PHT threshold (for a 2-bit counter, this is 2)
+    // PHT threshold calculation
     PHTThreshold = (1 << (PHTCtrBits - 1));
-
- 
 }
+
 
 
 bool GSelectBP::lookup(ThreadID tid, Addr branch_addr, void *&bp_history)
@@ -54,21 +39,22 @@ bool GSelectBP::lookup(ThreadID tid, Addr branch_addr, void *&bp_history)
     
     unsigned oldGlobalHistory = globalHistory[tid];
    
-    unsigned shiftVal = branch_addr >> ShiftAmount;
+    unsigned shiftVal = branch_addr >> ShiftAmount; //PASS
     
     // Define n bits of global history and m bits of branch address
-    unsigned pcBits = shiftVal & branchMask;
-    unsigned ght = oldGlobalHistory & globalHistoryMask;
+    unsigned pcBits = shiftVal & branchMask;		   //FAIL branch mask could be calcualted in correctly
+    unsigned ght = oldGlobalHistory & globalHistoryMask; //PASS
     
-    unsigned index = (ght << branchAddressBits) | pcBits;
+    //Wrong index is being printed
+    unsigned index = (ght << branchAddressBits) | pcBits; //Branch address bits could be wrong
     
 
     DPRINTF(GSDebug, "In lookup. globalHistoryReg: %u, branchAddr: %u, nn: %u, mm: %u\n", oldGlobalHistory, (unsigned)branch_addr, ght, pcBits);
     DPRINTF(GSDebug, "In lookup. instShiftAmt: %u, shifted val: %u, mask: %u\n",ShiftAmount, shiftVal, branchMask);
     DPRINTF(GSDebug, "In lookup. lookup PHTredictor size: %u\n", PredictorSize);
     DPRINTF(GSDebug, "In lookup. lookup PHTIdx: %u\n", index);
-	
-
+		
+    assert(index < PredictorSize && "PHT index out of bounds in lookup!");
     bool prediction = pht[index] >= PHTThreshold;
     
     //testing
@@ -133,7 +119,7 @@ void
 GSelectBP::squash(ThreadID tid, void *bp_history)
 {
  
-     if (!bp_history) return;
+     if (!bp_history) return; //solved seg fault issue 162500
     
      BPHistory *history = static_cast<BPHistory *>(bp_history);
     DPRINTF(GSDebug, "In squash. Global history register is: %u\n",history->ghr);
@@ -158,7 +144,7 @@ void GSelectBP::btbUpdate(ThreadID tid, Addr branch_addr, void *&bp_history)
 {	
      //seg fault occurs here... why????
     DPRINTF(GSDebug, "In btbUpdate. Global history register was: %u. Branch address: %u\n",globalHistory[tid], (unsigned)branch_addr);
-    globalHistory[tid] = (globalHistory[tid] << 1) & globalHistoryMask;
+    globalHistory[tid] = (globalHistory[tid] << 1) & globalHistoryMask; 
     bp_history = NULL;
 }
 
