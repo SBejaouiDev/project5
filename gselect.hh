@@ -73,21 +73,22 @@ class GSelectBP : public BPredUnit
         bool prediction;
         unsigned branch_addr;
     };
-
-    unsigned branchAddressBits;
-    unsigned branchMask;
-    unsigned globalHistoryMask;
-    unsigned PHTThreshold;
-
-    unsigned ShiftAmount;
-    unsigned PredictorSize;
+    
+    
     unsigned PHTCtrBits;
     unsigned globalHistoryBits;
-    
-    
+    unsigned phtIndexBits;
+    unsigned branchAddressBits;
+    unsigned ShiftAmount;
+    unsigned PredictorSize;
+    unsigned PHTThreshold;
+    unsigned branchMask;
+    unsigned globalHistoryMask;
 
     std::vector<SatCounter8> pht;
     std::vector<unsigned> globalHistory;
+
+
 };
 
 #endif // __CPU_PRED_GSELECT_BP_HH__
